@@ -71,25 +71,46 @@ app.post("/productos/crear_producto", async (req, res) => {
 //Pagar producto con Stripe
 app.post("/productos/pagar_producto", async (req, res) => {
     try {
-        const { uid_producto, uid_usuario } = req.body;
+        const { uid_producto, uid_usuario, paymentMethodId } = req.query;
 
+        // Verificar que los parámetros no estén vacíos
+        if (!uid_producto || !uid_usuario || !paymentMethodId) {
+            return res.status(400).json({ error: "Faltan parámetros necesarios" });
+        }
+
+        // Verificar usuario en Firestore
         const usuarioRef = await db.collection("perfiles").doc(uid_usuario).get();
-        if (!usuarioRef.exists) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
-
+        if (!usuarioRef.exists) {
+            return res.status(404).json({ error: "Usuario no encontrado" });
+        }
         const usuario = usuarioRef.data();
 
+        // Verificar producto en Firestore
         const productoRef = await db.collection("productos").doc(uid_producto).get();
-        if (!productoRef.exists) return res.status(404).json({ success: false, message: "Producto no encontrado" });
-
+        if (!productoRef.exists) {
+            return res.status(404).json({ error: "Producto no encontrado" });
+        }
         const producto = productoRef.data();
 
+        // Verificar que el usuario tenga un cliente en Stripe
+        if (!usuario.stripeCustomerId) {
+            return res.status(400).json({ error: "El usuario no tiene un cliente en Stripe" });
+        }
+
+        // Crear el pago con el método de pago especificado
         const paymentIntent = await stripe.paymentIntents.create({
-            amount: producto.precio * 100,
+            amount: producto.precio * 100, // Convertir a centavos
             currency: "usd",
-            payment_method_types: ["card"],
+            customer: usuario.stripeCustomerId,
+            payment_method: paymentMethodId, // Pasar el método de pago directamente
             confirm: true,
+            automatic_payment_methods: {
+                enabled: true,
+                allow_redirects: "never" // 🚨 Evitar métodos que requieren redirección
+            }
         });
 
+        // Guardar recibo en Firestore
         const recibo = {
             uid_producto,
             nombre_producto: producto.nombre,
@@ -99,12 +120,12 @@ app.post("/productos/pagar_producto", async (req, res) => {
         };
 
         await db.collection("perfiles").doc(uid_usuario).collection("recibos").add(recibo);
-
-        res.json({ success: true, message: "Pago realizado", recibo });
+        res.json({ message: "Pago realizado", recibo });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ error: error.message });
     }
 });
+
 
 //Obtener todos los recibos
 app.get("/perfiles/recibos", async (req, res) => {
