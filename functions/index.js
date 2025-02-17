@@ -97,16 +97,16 @@ app.post("/productos/pagar_producto", async (req, res) => {
             return res.status(400).json({ error: "El usuario no tiene un cliente en Stripe" });
         }
 
-        // Crear el pago con el método de pago especificado
+
         const paymentIntent = await stripe.paymentIntents.create({
-            amount: producto.precio * 100, // Convertir a centavos
+            amount: producto.precio * 100,
             currency: "usd",
             customer: usuario.stripeCustomerId,
-            payment_method: paymentMethodId, // Pasar el método de pago directamente
+            payment_method: paymentMethodId,
             confirm: true,
             automatic_payment_methods: {
                 enabled: true,
-                allow_redirects: "never" // 🚨 Evitar métodos que requieren redirección
+                allow_redirects: "never"
             }
         });
 
